@@ -1,4 +1,4 @@
-use crate::binary::{Binary, System, Meta, Section};
+use crate::binary::{Binary, Section, System};
 
 const MAGIC: u16 = 0x5A4D; // MZ
 const SIGNATURE: u32 = 0x00004550; // PE00
