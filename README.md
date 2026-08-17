@@ -1,5 +1,12 @@
 ## EXI
 
+> Disclaimer
+
+Most of the information here is here on a temporary status. It will eventually be migrated to Wikipages here in the Github repository. Additionally, a lot of this information is not final. Learning takes places in phases. As I am still learning, I am also still trying to decide the type of narration for the Wikipages. 
+
+If you have any questions, feel free to reach out in the mean time. You can find me here in my Discord server: [Discord]https://discord.gg/9ggw425YS3
+
+
 > What is exi?
 
 In short, it's a program that lets you read what is inside of an executable. Exi was created as part of a much bigger learning experience. Originally, I wanted to learn about malware. As I was going through the project (the program you are seeing now is not the first iteration, nor the second or third), I realized that in order to understand how malware works, I'd need to have a more in-depth view into computers. 
@@ -9,8 +16,6 @@ For someone wanting to learn how malware works, they'll need to know two essenti
 This project primarily exists because it contains everything that I've ever learned regarding the subjects. However, it does have another purpose. It is a research project. This project asks a very important question: How effective is static analysis in the determination of an executable marked with malware? Now clearly, I will rephrase the wording of this question. But the question will remain the same. I chose this question because the answer is surprisingly multifaceted. 
 
 When you read (not execute) a program with this program, your goal is typically to see if malware exists. Now, to be straight, you won't get a clear answer. Instead, you learn how to recognize patterns and flags that give you a probability of whether or not malware is present in the file you are reading. The phrase I'll commonly use is "indicitive but not definitive". Everything you'll learn could be indicitive that there is malware but it isn't definitive. Definitive just means that you've executed the suspicious file and you are finding out the hard way, especially if you don't have a configured environment to safely execute malware. For the purposes of this project, you won't see any data samples from malware for a while. Instead, we will look at data samples coming from legitimate programs, so you can learn what "normal" looks like and learn what an executable looks like underneath.
-
-
 
 ### Headers
 
