@@ -3,29 +3,35 @@
 use std::fmt;
 
 // Which family of executable we are holding. This decides who parses it.
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Format {
-    Windows,
-    Linux,
-    Mach,
+    Executable,
+    Elf,
+    MachO,
+    // No top-level coff support; exists only to be refeused as ParseError::UnsupportedFormat
     Coff, // No DOS stub or optional header; linker yet to run
 }
 
 impl fmt::Display for Format {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Format::Windows => write!(f, "Windows Executable"),
-            Format::Linux => write!(f, "Linux Executable"),
-            Format::Mach => write!(f, "Apple Executable (Mach-O)"),
+            Format::Executable => write!(f, "Portable Executable"),
+            Format::Elf => write!(f, "Unix/Linux"),
+            Format::MachO => write!(f, "Mach-O (Apple iOS/Mac)"),
         }
     }
 }
 
-// One function this binary borrows from somebody else's library.
-// Needs at minimum: the name, and the ordinal if it was imported by number
-// instead of by name.
+// Where the loader writes the function's real address once it is resolved
 #[derive(Clone, Debug)]
 pub struct ImportFn {
+    pub name: String,
+    pub iat_rva: Option<u64>,
+    // Sometimes, it's imported by number not name. Pesky malware authors
+    pub ordinal: Option<u16>,
+}
+
+impl ImportFn {
 
 }
 
@@ -104,7 +110,7 @@ impl Architecture {
         }
     }
 
-    pub fn Width(&self) -> Option<Width> {
+    pub fn width(&self) -> Option<Width> {
         match self {
             Architecture::X86(w) |
             Architecture::Arm(w) |
@@ -130,24 +136,20 @@ impl Architecture {
         matches!(self, Architecture::X86(_) | Architecture::Arm(_))
     }
 
-    impl fmt::Display for Architecture {
-        fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-            match self {
-                Architecture::X86(Width::Bits32) => f.write_str("x86"),
-                Architecture::X86(Width::Bits64) => f.write_str("x86-x64"),
-                Architecture::Arm(Width::Bits32) => f.write_str("ARM32"),
-                Architecture::Arm(Width::Bits64) => f.write_str("AArch64"),
-                Architecture::Mips(Width::Bits32) => f.write_str("MIPS32"),
-                Architecture::Mips(Width::Bits64) => f.write_str("MIPS64"),
-                Architecture::Unknown(raw) => write!(f, "Unknown ({raw:#x})"),
-            }
-        }
-    }
-
 }
 
-impl ImportFn {
-
+impl fmt::Display for Architecture {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Architecture::X86(Width::Bits32) => f.write_str("x86"),
+            Architecture::X86(Width::Bits64) => f.write_str("x86-x64"),
+            Architecture::Arm(Width::Bits32) => f.write_str("ARM32"),
+            Architecture::Arm(Width::Bits64) => f.write_str("AArch64"),
+            Architecture::Mips(Width::Bits32) => f.write_str("MIPS32"),
+            Architecture::Mips(Width::Bits64) => f.write_str("MIPS64"),
+            Architecture::Unknown(raw) => write!(f, "Unknown ({raw:#x})"),
+        }
+    }
 }
 
 // One library, plus every function taken out of it. Imports are the clearest
@@ -155,11 +157,14 @@ impl ImportFn {
 // OS means naming the call first.
 #[derive(Debug, Clone)]
 pub struct Import {
-
+    pub library: String,
+    pub functions: Vec<ImportFn>, // Gets all addresses of all imported functions
 }
 
 impl Import {
-
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.functions.iter().map(|f| f.name.as_str())
+    }
 }
 
 // One named region of the file. Described twice over: where it sits on disk
@@ -168,70 +173,91 @@ impl Import {
 #[derive(Debug, Clone)]
 pub struct Section {
     pub name: String,
-    pub address: u64, // virtual address
-    pub vSize: u64, // virtual size
-    pub offset: u64, // file offset
-    pub fSize: u64, // file size
+    pub virtual_address: u64, // virtual address
+    pub virtual_size: u64, // virtual size
+    pub file_offset: u64, // file offset
+    pub file_size: u64, // file size
     pub readable: bool,
     pub writable: bool,
     pub executable: bool,
+    pub entropy: f64, 
 }
 
 impl Section {
 
-    // Create and define readable flag
+    pub const HIGH_ENTROPY: f64 = 7.0;
+    pub const MAX_ENTROPY: f64 = 8.0;
+
+    // Create readable flag
     pub fn readable(&self) -> bool {
         self.readable
     }
 
-    // Create and define writeable flag
+    // Create writeable flag
     pub fn writable(&self) -> bool {
         self.writable
     }
 
-    // Create and define executable flag
+    // Create executable flag
     pub fn executable(&self) -> bool {
         self.executable
     }
+
+    // Redundant probably. 
+    pub fn write_executeable(&self) -> bool {
+        self.writable && self.executable
+    }
+
+    // High Entropy
+    pub fn high_entropy(&self) -> bool {
+        self.entropy >= Self::HIGH_ENTROPY
+    }
+
+    // Packed or Encrypted, doesn't matter. They look the same
+    pub fn packed_encrypted(&self) -> bool {
+        self.executable && self.high_entropy()
+    }
+
+    // Section bytes on the disk.
+    pub fn disk_bytes<'a>(&self, file: &'a [u8]) -> &'a [u8] {
+        clamped_slice(file, self.offset, self.file_size)
+    }
+
 }
 
-// One function this binary offers out to others. Mostly a DLL concern.
-// Needs: name, rva, ordinal, and the forwarder string for exports that point
-// at a function in a different library rather than at code here.
+// Not all that common you'd export a function from an executable, but you can.
+// This mainly covers DLL's (Dynamic-Link Libraries), which often export functions.
 #[derive(Debug, Clone)]
 pub struct Export {
-
+    pub name: String,
+    pub rva: u64,
+    pub ordinal: u16,
+    pub forwarder: Option<String>,
 }
 
 impl Export {
 
 }
 
-// One address that has to be patched if the image does not load at its
-// preferred ImageBase. ASLR means that is the normal case now, not the
-// exception.
+// One address that has to be patched
 #[derive(Debug, Clone)]
 pub struct Relocation {
-
+    pub rva: u64,
+    pub kind: u16,
 }
 
 impl Relocation {
 
 }
 
-// Bytes past the end of the last section. No header describes this region and
-// the loader never maps it, so it is the cheapest place in the file to append
-// something.
+// Bytes past the end of the last section.
 #[derive(Debug, Clone)]
 pub struct Overlay {
     pub offset: u64, // where undescribed region starts
     pub size: u64, // size of undescribed region
+    pub entropy: f64,
 }
 
-// The finished answer, and the reason every other type in this file exists.
-// Whatever format came in, this is what comes out: one shape that report.rs
-// and json.rs can read without knowing whether they are looking at a PE, an
-// ELF or a Mach-O.
 #[derive(Clone, Debug)]
 pub struct Binary {
     pub format: Format,
@@ -245,5 +271,8 @@ pub struct Binary {
     pub strings: Vec<String>, 
     pub relocations: Vec<Relocation>,
     pub overlay: Option<Overlay>,
+}
+
+impl Binary {
 
 }

@@ -20,3 +20,7 @@ pub mod cli;
 pub mod hex;
 pub mod json;
 pub mod report;
+
+
+// For testing:
+pub mod binary_v2;
