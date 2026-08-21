@@ -18,6 +18,7 @@ impl fmt::Display for Format {
             Format::Executable => write!(f, "Portable Executable"),
             Format::Elf => write!(f, "Unix/Linux"),
             Format::MachO => write!(f, "Mach-O (Apple iOS/Mac)"),
+            Format::Coff => write!(f, "Top-Level COFF; Unsupported"),
         }
     }
 }
@@ -186,7 +187,6 @@ pub struct Section {
 impl Section {
 
     pub const HIGH_ENTROPY: f64 = 7.0;
-    pub const MAX_ENTROPY: f64 = 8.0;
 
     // Create readable flag
     pub fn readable(&self) -> bool {
@@ -256,6 +256,18 @@ pub struct Overlay {
     pub offset: u64, // where undescribed region starts
     pub size: u64, // size of undescribed region
     pub entropy: f64,
+}
+
+#[derive(Debug, Clone)]
+pub struct ExeMeta {
+    pub timestamp: u32,
+    pub reproducible: bool,
+    pub subsystem: &'static str,
+    pub dll_characteristics: Vec<&'static str>,
+    pub dotnet: bool,
+    pub signed: bool,
+    pub resources: bool,
+    pub tls_callbacks: Vec<u64>,
 }
 
 #[derive(Clone, Debug)]

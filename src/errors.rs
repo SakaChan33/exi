@@ -53,7 +53,7 @@ impl fmt::Display for Format {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq,)]
 pub enum ParseError {
 
     /// Zero-length input.
