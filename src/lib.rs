@@ -6,6 +6,7 @@ pub mod limits;
 // Reading and dispatch.
 pub mod parse;
 pub mod reader;
+pub mod reader_v2;
 
 // Per-format parsers.
 pub mod linux;
